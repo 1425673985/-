@@ -1,6 +1,11 @@
 // pages/index/index.js
 const app = getApp()
 
+// 确保 app 实例存在
+if (!app) {
+  console.error('App 实例未找到，请检查 app.js 是否正确初始化')
+}
+
 Page({
   data: {
     longitude: 116.397128,
@@ -8,6 +13,7 @@ Page({
     scale: 16,
     markers: [],
     showLocation: true, // 启用原生蓝色定位圆点（显示用户位置）
+    showLocationButtons: false, // 是否显示地图左右两个定位按钮（默认隐藏，后续需要时再打开）
     currentToilet: null,
     toiletList: [],
     currentToiletIndex: 0,
@@ -191,8 +197,10 @@ Page({
           searchRadius: 1000 // 搜索范围为1000m
         })
         
-        // 保存到全局
-        app.globalData.userLocation = { longitude, latitude }
+        // 保存到全局（确保 app 实例存在）
+        if (app && app.globalData) {
+          app.globalData.userLocation = { longitude, latitude }
+        }
         
         // 移动到用户位置（视觉聚焦）
         this.moveToLocation(longitude, latitude)
@@ -452,7 +460,9 @@ Page({
       if (index >= 0) {
         this.data.toiletList[index].detailAddress = detailAddress
         this.setData({ toiletList: this.data.toiletList })
-        app.globalData.toiletList = this.data.toiletList
+        if (app && app.globalData) {
+          app.globalData.toiletList = this.data.toiletList
+        }
       }
     }
     
@@ -489,8 +499,10 @@ Page({
     console.log('详细地址获取完成')
 
     // 保存到全局和本地
-    app.globalData.toiletList = toilets
-    app.globalData.currentToiletIndex = 0
+    if (app && app.globalData) {
+      app.globalData.toiletList = toilets
+      app.globalData.currentToiletIndex = 0
+    }
 
     this.setData({
       toiletList: toilets,
@@ -543,7 +555,7 @@ Page({
       height: 80,
       // 使用自定义图标路径（如果存在），否则使用默认样式
       // 图标设计：圆形背景 + 厕所图标，红色系，与默认POI区分
-      iconPath: '/images/toilet-marker.png', // 自定义厕所图标
+      // iconPath: '/images/toilet-marker.png', // 自定义厕所图标（文件不存在时注释掉，使用默认样式）
       // 高亮样式：使用醒目的颜色和样式
       callout: {
         content: toilet.title,
@@ -648,7 +660,9 @@ Page({
     }, 100)
 
     // 更新全局索引
-    app.globalData.currentToiletIndex = index
+    if (app && app.globalData) {
+      app.globalData.currentToiletIndex = index
+    }
   },
 
   // 切换到下一个厕所（在当前搜索范围内循环）
@@ -673,7 +687,9 @@ Page({
         
         // 更新用户位置
         this.setData({ userLocation })
-        app.globalData.userLocation = userLocation
+        if (app && app.globalData) {
+          app.globalData.userLocation = userLocation
+        }
         
         // 重新计算所有厕所的距离（基于当前用户位置）
         this.data.toiletList.forEach(toilet => {
@@ -696,7 +712,9 @@ Page({
         
         // 更新列表数据
         this.setData({ toiletList: this.data.toiletList })
-        app.globalData.toiletList = this.data.toiletList
+        if (app && app.globalData) {
+          app.globalData.toiletList = this.data.toiletList
+        }
         
         // 显示下一个厕所，地图中心定位到厕所位置（触发动画）
         this.showToilet(finalIndex, true)
@@ -919,7 +937,9 @@ Page({
               this.setData({
                 userLocation: { longitude, latitude }
               })
-              app.globalData.userLocation = { longitude, latitude }
+              if (app && app.globalData) {
+                app.globalData.userLocation = { longitude, latitude }
+              }
               
               // 调用平滑聚焦函数，传入用户坐标
               this.smoothMapFocus(latitude, longitude)
@@ -960,8 +980,10 @@ Page({
       success: (res) => {
         const { longitude, latitude } = res
         
-        // 保存到全局
-        app.globalData.userLocation = { longitude, latitude }
+        // 保存到全局（确保 app 实例存在）
+        if (app && app.globalData) {
+          app.globalData.userLocation = { longitude, latitude }
+        }
         
         // 更新用户位置
         this.setData({

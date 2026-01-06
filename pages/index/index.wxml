@@ -33,12 +33,12 @@
       show-compass="{{false}}"
       show-scale="{{false}}"
     ></map>
-    <!-- 左侧定位按钮（用户位置） -->
-    <view class="location-btn location-btn-left" bindtap="locateUser">
+    <!-- 左侧定位按钮（用户位置） - 通过 showLocationButtons 开关控制显示 -->
+    <view class="location-btn location-btn-left" bindtap="locateUser" wx:if="{{showLocationButtons}}">
       <text class="location-icon location-icon-user">📍</text>
     </view>
-    <!-- 右侧定位按钮（厕所位置） -->
-    <view class="location-btn location-btn-right" bindtap="locateToToilet">
+    <!-- 右侧定位按钮（厕所位置） - 通过 showLocationButtons 开关控制显示 -->
+    <view class="location-btn location-btn-right" bindtap="locateToToilet" wx:if="{{showLocationButtons}}">
       <text class="location-icon location-icon-toilet">📍</text>
     </view>
   </view>
