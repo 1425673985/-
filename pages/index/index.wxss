@@ -103,6 +103,23 @@
   position: relative;
 }
 
+/* 地图加载占位 */
+.map-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #F5F5F5;
+  position: relative;
+}
+
+.map-loading-text {
+  font-size: 28rpx;
+  color: #999;
+  text-align: center;
+}
+
 /* 为推荐厕所标记添加呼吸动画效果 */
 /* 注意：微信小程序 map 组件的 marker 不支持直接 CSS 动画 */
 /* 可以通过以下方式实现：
@@ -407,11 +424,28 @@
   margin-top: 20rpx;
   padding-top: 20rpx;
   border-top: 1rpx solid rgba(0, 0, 0, 0.05);
-  opacity: 0.5;
+}
+
+.trust-hint-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #FFFFFF;
+  border-radius: 40rpx;
+  padding: 12rpx 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.trust-hint-icon {
+  font-size: 24rpx;
+  color: #4A90E2;
+  margin-right: 8rpx;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .trust-hint-text {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #999;
   line-height: 1.4;
   font-weight: 400;
@@ -645,5 +679,139 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* 导航模式：路线指引 */
+.navigation-guide {
+  margin-top: 20rpx;
+  padding: 30rpx;
+  background-color: #FFFFFF;
+  border-radius: 20rpx;
+  max-height: 400rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+}
+
+.navigation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.05);
+}
+
+.navigation-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+
+.navigation-close {
+  font-size: 36rpx;
+  color: #999;
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #F5F5F5;
+  transition: background-color 0.2s ease;
+}
+
+.navigation-close:active {
+  background-color: #E0E0E0;
+}
+
+.navigation-stats {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 20rpx;
+  padding: 20rpx 16rpx;
+  background-color: #F8F9FA;
+  border-radius: 12rpx;
+  gap: 20rpx;
+}
+
+.navigation-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 22rpx;
+  color: #999;
+  margin-bottom: 8rpx;
+}
+
+.stat-value {
+  font-size: 32rpx;
+  color: #333;
+  font-weight: 600;
+}
+
+.navigation-steps {
+  max-height: 300rpx;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.navigation-step-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.05);
+}
+
+.navigation-step-item:last-child {
+  border-bottom: none;
+}
+
+.step-number {
+  width: 48rpx;
+  height: 48rpx;
+  min-width: 48rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF4757 100%);
+  color: #FFFFFF;
+  font-size: 24rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.step-instruction {
+  font-size: 28rpx;
+  color: #333;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.step-distance {
+  font-size: 22rpx;
+  color: #999;
+  line-height: 1.4;
+}
+
+.navigation-empty {
+  padding: 40rpx 20rpx;
+  text-align: center;
+}
+
+.empty-text {
+  font-size: 24rpx;
+  color: #999;
 }
 

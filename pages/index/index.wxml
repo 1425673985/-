@@ -14,8 +14,12 @@
   </view>
   <!-- 地图区域 -->
   <view class="map-wrapper" style="margin-top: {{totalNavBarHeight || 128}}rpx;">
+    <!-- 关键修复：只有在成功获取到用户位置后才渲染 map 组件 -->
+    <!-- 使用 wx:if + key 强制重新创建 map，确保 show-location 生效 -->
     <map
+      wx:if="{{mapReady && longitude && latitude}}"
       id="map"
+      key="map-{{mapKey}}"
       class="map-container"
       longitude="{{longitude}}"
       latitude="{{latitude}}"
@@ -33,6 +37,10 @@
       show-compass="{{false}}"
       show-scale="{{false}}"
     ></map>
+    <!-- 地图加载占位（可选，提升用户体验） -->
+    <view class="map-placeholder" wx:else>
+      <view class="map-loading-text">正在获取您的位置...</view>
+    </view>
     <!-- 左侧定位按钮（用户位置） - 通过 showLocationButtons 开关控制显示 -->
     <view class="location-btn location-btn-left" bindtap="locateUser" wx:if="{{showLocationButtons}}">
       <text class="location-icon location-icon-user">📍</text>
@@ -101,10 +109,14 @@
       </view>
     </view>
 
-    <!-- 信任提示：轻量级，不干扰主流程 -->
-    <view class="toilet-trust-hint" wx:if="{{currentToilet && searchStatus === 'found'}}">
-      <text class="trust-hint-text">已按距离排序</text>
+    <!-- 信任提示：轻量级，不干扰主流程 - 只在显示最佳距离厕所时显示 -->
+    <view class="toilet-trust-hint" wx:if="{{currentToilet && searchStatus === 'found' && !isNavigating && currentToiletIndex === 0}}">
+      <view class="trust-hint-container">
+        <text class="trust-hint-icon">✓</text>
+        <text class="trust-hint-text">已按距离排序，优先显示最近</text>
+      </view>
     </view>
+
   </view>
 
   <!-- 加载提示 -->

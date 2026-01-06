@@ -8,15 +8,16 @@ if (!app) {
 
 Page({
   data: {
-    longitude: 116.397128,
-    latitude: 39.916527,
+    longitude: null, // 初始化为 null，只有在获取到用户位置后才设置
+    latitude: null, // 初始化为 null，只有在获取到用户位置后才设置
     scale: 16,
     markers: [],
     showLocation: true, // 启用原生蓝色定位圆点（显示用户位置）
     showLocationButtons: false, // 是否显示地图左右两个定位按钮（默认隐藏，后续需要时再打开）
     currentToilet: null,
-    toiletList: [],
-    currentToiletIndex: 0,
+    toiletList: [], // 搜索结果列表（已按真实步行距离升序排序）
+    bestToilet: null, // 系统最优厕所（只赋值一次，不可变）
+    currentToiletIndex: 0, // 当前展示索引
     loading: false,
     searchRadius: 1000, // 当前搜索范围（米）
     userLocation: null, // 用户位置
@@ -28,26 +29,45 @@ Page({
     navBarHeight: 44, // 导航栏内容高度（px），默认值
     totalNavBarHeight: 128, // 总导航栏高度（rpx），默认值（约20+44=64px，转换为rpx约128）
     titleAnimate: false, // 控制标题动画
-    searchStatus: 'locating' // 搜索状态：locating-定位中, found-已找到, noResult-无结果
+    searchStatus: 'locating', // 搜索状态：locating-定位中, found-已找到, noResult-无结果
+    mapReady: false, // 控制 map 组件是否渲染，只有在获取到用户位置后才为 true
+    mapKey: 0 // 动态 key，用于强制重新创建 map 组件
   },
 
   onLoad() {
     // 获取系统信息，适配安全区域
     this.getSystemInfo()
-    this.checkLocationPermission()
-    // 初始化地图上下文
-    this.mapContext = wx.createMapContext('map', this)
     // 初始化定时器变量
     this.focusTimer = null
     this.breathingTimer = null // 呼吸动画定时器
     this.breathingDirection = 1 // 呼吸动画方向：1-增大，-1-减小
     this.breathingAlpha = 1.0 // 当前透明度值
+    // 注意：mapContext 不在 onLoad 中初始化，而是在 map 组件渲染后才初始化
+    // 检查定位权限
+    this.checkLocationPermission()
   },
 
-  // 获取系统信息
+  onShow() {
+    // 页面显示时，如果已有权限但位置未获取，重新获取位置
+    // 处理从设置页面返回的情况
+    wx.getSetting({
+      success: (res) => {
+        if (res.authSetting['scope.userLocation']) {
+          // 已授权，检查是否需要更新位置
+          if (!this.data.userLocation || !this.data.userLocation.longitude) {
+            // 位置未获取，重新获取
+            this.getUserLocation()
+          }
+        }
+      }
+    })
+  },
+
+  // 获取系统信息（使用新的 API，替代已废弃的 wx.getSystemInfoSync）
   getSystemInfo() {
-    const systemInfo = wx.getSystemInfoSync()
-    const statusBarHeight = systemInfo.statusBarHeight || 0
+    // 使用新的 API 获取窗口信息
+    const windowInfo = wx.getWindowInfo()
+    const statusBarHeight = windowInfo.statusBarHeight || 0
     // 获取胶囊按钮信息（用于计算导航栏高度）
     const menuButtonInfo = wx.getMenuButtonBoundingClientRect ? wx.getMenuButtonBoundingClientRect() : null
     // 导航栏内容高度 = (胶囊按钮顶部距离 - 状态栏高度) * 2 + 胶囊按钮高度
@@ -59,7 +79,7 @@ Page({
     }
     
     // 计算总导航栏高度（状态栏 + 内容区域），转换为rpx
-    const screenWidth = systemInfo.windowWidth || 375
+    const screenWidth = windowInfo.windowWidth || 375
     const rpxRatio = 750 / screenWidth
     const totalNavBarHeight = (statusBarHeight + navBarContentHeight) * rpxRatio
     
@@ -134,8 +154,11 @@ Page({
     wx.getSetting({
       success: (res) => {
         if (res.authSetting['scope.userLocation']) {
-          // 已授权，获取位置
+          // 已授权，立即获取位置
           this.getUserLocation()
+        } else if (res.authSetting['scope.userLocation'] === false) {
+          // 用户之前拒绝过，需要引导去设置
+          this.requestLocationPermission()
         } else {
           // 未授权，请求授权
           this.requestLocationPermission()
@@ -152,9 +175,14 @@ Page({
     wx.authorize({
       scope: 'scope.userLocation',
       success: () => {
-        this.getUserLocation()
+        // 授权成功，立即获取位置
+        // 延迟一小段时间确保授权完全生效
+        setTimeout(() => {
+          this.getUserLocation()
+        }, 100)
       },
       fail: () => {
+        // 授权失败，可能是用户拒绝或需要去设置页面
         wx.showModal({
           title: '定位权限',
           content: '需要获取您的位置信息才能查找附近厕所，请在设置中开启定位权限',
@@ -162,7 +190,16 @@ Page({
           confirmText: '去设置',
           success: (res) => {
             if (res.confirm) {
-              wx.openSetting()
+              // 打开设置页面
+              wx.openSetting({
+                success: (settingRes) => {
+                  // 从设置页面返回后，检查权限是否已开启
+                  if (settingRes.authSetting['scope.userLocation']) {
+                    // 权限已开启，立即获取位置
+                    this.getUserLocation()
+                  }
+                }
+              })
             }
           }
         })
@@ -190,11 +227,17 @@ Page({
       type: 'gcj02', // 返回可以用于腾讯地图的坐标类型
       success: (res) => {
         const { longitude, latitude } = res
+        
+        // 关键修复：只有在成功获取到经纬度后，才渲染 map 组件
+        // 使用 mapKey 强制重新创建 map 组件，确保 show-location 生效
         this.setData({
           longitude,
           latitude,
           userLocation: { longitude, latitude },
-          searchRadius: 1000 // 搜索范围为1000m
+          searchRadius: 1000, // 搜索范围为1000m
+          showLocation: true, // 确保 show-location 属性为 true
+          mapReady: true, // 标记 map 可以渲染了
+          mapKey: this.data.mapKey + 1 // 更新 key，强制重新创建 map 组件
         })
         
         // 保存到全局（确保 app 实例存在）
@@ -202,8 +245,26 @@ Page({
           app.globalData.userLocation = { longitude, latitude }
         }
         
-        // 移动到用户位置（视觉聚焦）
-        this.moveToLocation(longitude, latitude)
+        // 延迟初始化 mapContext，确保 map 组件已渲染
+        setTimeout(() => {
+          if (!this.mapContext) {
+            this.mapContext = wx.createMapContext('map', this)
+          }
+          
+          // 使用 mapContext 移动地图到用户位置，确保地图更新
+          if (this.mapContext) {
+            this.mapContext.moveToLocation({
+              longitude: longitude,
+              latitude: latitude,
+              success: () => {
+                console.log('地图已移动到用户位置，蓝点应已显示')
+              },
+              fail: (err) => {
+                console.warn('地图移动失败，但不影响功能', err)
+              }
+            })
+          }
+        }, 300) // 延迟300ms，确保 map 组件已完全渲染
         
         // 搜索附近厕所（统一使用1000m范围）
         this.searchNearbyToilets(longitude, latitude)
@@ -222,7 +283,7 @@ Page({
     })
   },
 
-  // 搜索附近厕所（统一使用1000m范围）
+  // 搜索附近厕所（分段距离策略：先500m，再500m-1000m）
   searchNearbyToilets(longitude, latitude) {
     // 保存用户位置
     this.setData({ userLocation: { longitude, latitude } })
@@ -230,20 +291,34 @@ Page({
     // 使用腾讯地图API搜索附近厕所
     const key = 'M62BZ-XIQWA-Q2GKJ-C7MUC-LV5U5-QOFAT' // 腾讯地图API Key
     
-    // 直接搜索1000m范围内的厕所
-    this.searchWithRadius(longitude, latitude, 1000, key, (toilets) => {
-      if (toilets.length > 0) {
-        // 有厕所，使用这些厕所
-        this.setData({ searchRadius: 1000 })
-        this.processToiletList(toilets)
+    // 第一优先级：搜索500m范围内的厕所
+    this.searchWithRadius(longitude, latitude, 500, key, (toilets500m) => {
+      if (toilets500m.length > 0) {
+        // 500m内有结果，使用这些厕所
+        this.setData({ searchRadius: 500 })
+        this.processToiletList(toilets500m)
       } else {
-        // 1000m内没有厕所，静默处理
-        this.setData({ 
-          searchRadius: 1000,
-          loading: false,
-          toiletList: [],
-          currentToilet: null,
-          searchStatus: 'noResult' // 无结果
+        // 500m内没有结果，自动搜索500m-1000m范围
+        // 注意：腾讯地图API的nearby是圆形范围，需要先搜索1000m，然后过滤掉500m内的
+        this.searchWithRadius(longitude, latitude, 1000, key, (toilets1000m) => {
+          // 过滤掉500m内的厕所（只保留500m-1000m的）
+          const toilets500to1000m = toilets1000m.filter(toilet => toilet.distance > 500)
+          
+          if (toilets500to1000m.length > 0) {
+            // 500m-1000m内有结果，使用这些厕所
+            this.setData({ searchRadius: 1000 })
+            this.processToiletList(toilets500to1000m)
+          } else {
+            // 1000m内仍无结果，返回无结果状态
+            this.setData({ 
+              searchRadius: 1000,
+              loading: false,
+              toiletList: [],
+              currentToilet: null,
+              bestToilet: null,
+              searchStatus: 'noResult' // 无结果
+            })
+          }
         })
       }
     })
@@ -474,7 +549,8 @@ Page({
     if (toilets.length === 0) {
       this.setData({ 
         loading: false,
-        searchStatus: 'noResult' // 无结果
+        searchStatus: 'noResult', // 无结果
+        bestToilet: null
       })
       wx.showToast({
         title: '附近没有找到厕所',
@@ -482,6 +558,9 @@ Page({
       })
       return
     }
+
+    // 确保按真实步行距离升序排序（API返回的_distance已经是真实距离，但需要再次确认排序）
+    toilets.sort((a, b) => a.distance - b.distance)
 
     // 标记距离最近的厕所（第一个就是最近的，因为已经按距离排序）
     if (toilets.length > 0) {
@@ -498,20 +577,26 @@ Page({
     await this.enrichToiletsWithDetailAddress(toilets, key)
     console.log('详细地址获取完成')
 
+    // 关键：固定保存 bestToilet（只赋值一次，不可变）
+    // bestToilet 始终是 toiletList[0]，即系统最优解
+    const bestToilet = toilets.length > 0 ? Object.assign({}, toilets[0]) : null
+
     // 保存到全局和本地
     if (app && app.globalData) {
       app.globalData.toiletList = toilets
       app.globalData.currentToiletIndex = 0
+      app.globalData.bestToilet = bestToilet
     }
 
     this.setData({
       toiletList: toilets,
+      bestToilet: bestToilet, // 固定保存系统最优厕所（只赋值一次）
       currentToiletIndex: 0,
       loading: false,
       searchStatus: 'found' // 已找到
     })
 
-    // 显示第一个厕所（最近距离的）
+    // 显示第一个厕所（最近距离的，即 bestToilet）
     this.showToilet(0)
     
     // 触发标题淡入动画
@@ -665,7 +750,7 @@ Page({
     }
   },
 
-  // 切换到下一个厕所（在当前搜索范围内循环）
+  // 切换到下一个厕所（在最优与备选之间做快速决策）
   switchToNextToilet() {
     if (this.data.toiletList.length <= 1) {
       wx.showToast({
@@ -676,78 +761,20 @@ Page({
       return
     }
 
-    const nextIndex = (this.data.currentToiletIndex + 1) % this.data.toiletList.length
-    
-    // 刷新用户位置：重新获取用户当前位置
-    wx.getLocation({
-      type: 'gcj02',
-      success: (res) => {
-        const { longitude, latitude } = res
-        const userLocation = { longitude, latitude }
-        
-        // 更新用户位置
-        this.setData({ userLocation })
-        if (app && app.globalData) {
-          app.globalData.userLocation = userLocation
-        }
-        
-        // 重新计算所有厕所的距离（基于当前用户位置）
-        this.data.toiletList.forEach(toilet => {
-          const distance = this.calculateDistance(
-            latitude,
-            longitude,
-            toilet.latitude,
-            toilet.longitude
-          )
-          toilet.distance = Math.round(distance)
-        })
-        
-        // 按距离重新排序
-        this.data.toiletList.sort((a, b) => a.distance - b.distance)
-        
-        // 找到下一个厕所的新索引（因为排序后索引可能变化）
-        const nextToilet = this.data.toiletList[nextIndex]
-        const newIndex = this.data.toiletList.findIndex(t => t.id === nextToilet.id)
-        const finalIndex = newIndex >= 0 ? newIndex : nextIndex
-        
-        // 更新列表数据
-        this.setData({ toiletList: this.data.toiletList })
-        if (app && app.globalData) {
-          app.globalData.toiletList = this.data.toiletList
-        }
-        
-        // 显示下一个厕所，地图中心定位到厕所位置（触发动画）
-        this.showToilet(finalIndex, true)
-        
-        // 如果当前厕所的详细地址不完整（包含"附近"），重新获取
-        const currentToilet = this.data.toiletList[finalIndex]
-        if (currentToilet && 
-            (!currentToilet.detailAddress || 
-             currentToilet.detailAddress.includes('附近') ||
-             currentToilet.detailAddress === currentToilet.address)) {
-          this.refreshDetailAddress(currentToilet)
-        }
-      },
-      fail: (err) => {
-        console.error('获取位置失败', err)
-        // 如果获取位置失败，仍然切换厕所，但使用之前的位置计算距离
-        const userLocation = this.data.userLocation || app.globalData.userLocation
-        if (userLocation) {
-          const toilet = this.data.toiletList[nextIndex]
-          const distance = this.calculateDistance(
-            userLocation.latitude,
-            userLocation.longitude,
-            toilet.latitude,
-            toilet.longitude
-          )
-          toilet.distance = Math.round(distance)
-        }
-        this.showToilet(nextIndex, true)
-      }
-    })
+    // 只在 index 0（最优）和 index 1（备选）之间切换
+    const hasSecondCandidate = this.data.toiletList.length >= 2
+    if (!hasSecondCandidate) {
+      return
+    }
+
+    const currentIndex = this.data.currentToiletIndex
+    const nextIndex = currentIndex === 0 ? 1 : 0
+
+    // 不在「换一个」过程中重新搜索、不扩圈、不改写 bestToilet
+    this.showToilet(nextIndex, true)
   },
 
-  // 导航到厕所
+  // 导航到厕所（使用微信内置地图）
   navigateToToilet() {
     const toilet = this.data.currentToilet
     if (!toilet) {
@@ -758,38 +785,25 @@ Page({
       return
     }
 
-    // 跳转到腾讯地图导航
-    const destination = `${toilet.latitude},${toilet.longitude}`
-    const destinationName = encodeURIComponent(toilet.title)
-    
-    // 优先使用腾讯地图小程序跳转
-    wx.navigateToMiniProgram({
-      appId: 'wx5bc2ac602a747594', // 腾讯地图小程序appid
-      path: `pages/route/route?type=drive&to=${destination}&toname=${destinationName}`,
+    // 使用 wx.openLocation 打开微信内置地图
+    // 该 API 会打开微信内置地图界面，用户可选择高德/百度/腾讯地图进行导航
+    // 不会触发任何小程序跳转确认弹窗
+    wx.openLocation({
+      latitude: toilet.latitude, // 纬度，浮点数，范围为 -90~90
+      longitude: toilet.longitude, // 经度，浮点数，范围为 -180~180
+      name: toilet.title || '目的地', // 位置名称
+      address: toilet.detailAddress || toilet.address || '', // 地址详情
+      scale: 18, // 缩放比例，范围 5~18，值越大越精确
       success: () => {
-        console.log('跳转到腾讯地图成功')
+        console.log('打开微信内置地图成功')
       },
       fail: (err) => {
-        console.error('跳转失败', err)
-        // 如果跳转失败，使用微信内置打开地图功能
-        wx.openLocation({
-          latitude: toilet.latitude,
-          longitude: toilet.longitude,
-          name: toilet.title,
-          address: toilet.address,
-          scale: 18,
-          success: () => {
-            console.log('打开地图成功')
-          },
-          fail: (openErr) => {
-            console.error('打开地图失败', openErr)
-            // 最后提示用户手动导航
-            wx.showModal({
-              title: '导航',
-              content: `目的地：${toilet.title}\n地址：${toilet.address}\n\n请使用地图应用导航`,
-              showCancel: false
-            })
-          }
+        console.error('打开地图失败', err)
+        // 如果打开失败，显示友好提示
+        wx.showModal({
+          title: '导航',
+          content: `目的地：${toilet.title}\n地址：${toilet.detailAddress || toilet.address || ''}\n\n请检查定位权限或使用其他地图应用导航`,
+          showCancel: false
         })
       }
     })
