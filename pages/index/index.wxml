@@ -1,0 +1,137 @@
+<view class="container">
+  <!-- 自定义导航栏 -->
+  <view class="custom-navbar" style="padding-top: {{statusBarHeight}}px;">
+    <view class="navbar-content" style="height: {{navBarHeight}}px;">
+      <view class="navbar-title-wrapper">
+        <text class="navbar-title {{titleAnimate ? 'animate-title-fade-in' : ''}}">附近寻厕</text>
+        <text class="navbar-status {{titleAnimate ? 'animate-title-fade-in' : ''}}" style="animation-delay: 0.1s;">
+          <text wx:if="{{searchStatus === 'locating'}}">正在为您寻找附近厕所...</text>
+          <text wx:elif="{{searchStatus === 'found'}}">已为您筛选附近厕所</text>
+          <text wx:elif="{{searchStatus === 'noResult'}}">附近暂无可用厕所</text>
+        </text>
+      </view>
+    </view>
+  </view>
+  <!-- 地图区域 -->
+  <view class="map-wrapper" style="margin-top: {{totalNavBarHeight || 128}}rpx;">
+    <map
+      id="map"
+      class="map-container"
+      longitude="{{longitude}}"
+      latitude="{{latitude}}"
+      scale="{{scale}}"
+      markers="{{markers}}"
+      show-location="{{showLocation}}"
+      bindtap="onMapTap"
+      enable-poi="{{false}}"
+      enable-building="{{false}}"
+      enable-3D="{{false}}"
+      enable-overlooking="{{false}}"
+      enable-rotate="{{false}}"
+      enable-scroll="{{true}}"
+      enable-zoom="{{true}}"
+      show-compass="{{false}}"
+      show-scale="{{false}}"
+    ></map>
+    <!-- 左侧定位按钮（用户位置） -->
+    <view class="location-btn location-btn-left" bindtap="locateUser">
+      <text class="location-icon location-icon-user">📍</text>
+    </view>
+    <!-- 右侧定位按钮（厕所位置） -->
+    <view class="location-btn location-btn-right" bindtap="locateToToilet">
+      <text class="location-icon location-icon-toilet">📍</text>
+    </view>
+  </view>
+
+  <!-- 厕所信息卡片 - 导航类小程序优化：分组呈现 -->
+  <view class="toilet-card {{cardAnimate ? 'animate-fade-in-up' : ''}}" wx:if="{{currentToilet}}">
+    <!-- 推荐/优先标签（非强视觉） -->
+    <view class="toilet-recommend-badge" wx:if="{{currentToilet.isNearest || currentToilet.isRecommended}}">
+      <text class="recommend-badge-text">{{currentToilet.isNearest ? '推荐' : '优先'}}</text>
+    </view>
+
+    <!-- 行动信息组：步行时间、距离（导航决策核心） -->
+    <view class="toilet-action-group">
+      <view class="walking-time-wrapper">
+        <text class="walking-time-icon">🚶</text>
+        <text class="walking-time-text">{{currentToilet.walkingTimeText || '计算中...'}}</text>
+        <text class="walking-time-label">步行</text>
+      </view>
+      <view class="distance-info">
+        <text class="distance-value">{{currentToilet.distance}}</text>
+        <text class="distance-unit">m</text>
+      </view>
+    </view>
+
+    <!-- 地点描述组：名称、地址、类型、评分、设施等 -->
+    <view class="toilet-location-group">
+      <!-- 名称行：名称 + 类型标签 -->
+      <view class="toilet-name-row">
+        <text class="toilet-name">{{currentToilet.title}}</text>
+        <text class="toilet-type-tag" wx:if="{{currentToilet.type}}">{{currentToilet.type === 'public' ? '公共' : currentToilet.type === 'mall' ? '商场' : currentToilet.type === 'subway' ? '地铁' : ''}}</text>
+      </view>
+
+      <!-- 地址信息（弱化处理） -->
+      <view class="toilet-address-row-weak">
+        <text class="address-icon-weak">📍</text>
+        <text class="address-text-weak">{{currentToilet.displayAddress || currentToilet.detailAddress || currentToilet.address}}</text>
+      </view>
+
+      <!-- 辅助信息：评分、设施（可选显示） -->
+      <view class="toilet-extended-info" wx:if="{{currentToilet.rating || currentToilet.facilities}}">
+        <view class="toilet-rating" wx:if="{{currentToilet.rating}}">
+          <view class="rating-stars">
+            <text wx:for="{{[1,2,3,4,5]}}" wx:key="index" class="star {{index <= currentToilet.rating ? 'filled' : ''}}">★</text>
+          </view>
+          <text class="rating-text">{{currentToilet.rating}}分</text>
+        </view>
+        <view class="toilet-facilities" wx:if="{{currentToilet.facilities && currentToilet.facilities.length > 0}}">
+          <text class="facility-tag" wx:for="{{currentToilet.facilities}}" wx:key="index" wx:for-item="facility">
+            <text wx:if="{{facility === 'accessible'}}">♿ 无障碍</text>
+            <text wx:elif="{{facility === 'baby'}}">👶 母婴</text>
+            <text wx:elif="{{facility === 'clean'}}">✨ 干净</text>
+            <text wx:else>{{facility}}</text>
+          </text>
+        </view>
+      </view>
+
+      <!-- 标签组（可选显示） -->
+      <view class="toilet-tags" wx:if="{{currentToilet.comments && currentToilet.comments.length > 0}}">
+        <text class="toilet-tag" wx:for="{{currentToilet.comments}}" wx:key="index" wx:for-item="comment">{{comment}}</text>
+      </view>
+    </view>
+
+    <!-- 信任提示：轻量级，不干扰主流程 -->
+    <view class="toilet-trust-hint" wx:if="{{currentToilet && searchStatus === 'found'}}">
+      <text class="trust-hint-text">已按距离排序</text>
+    </view>
+  </view>
+
+  <!-- 加载提示 -->
+  <view class="loading" wx:if="{{loading}}">
+    <text>正在查找附近厕所...</text>
+  </view>
+
+  <!-- 操作按钮区域 - 应急场景优化：主按钮在右侧（拇指热区） -->
+  <view class="action-buttons">
+    <!-- 次按钮：换一个（左侧，弱化处理） -->
+    <button class="action-btn-secondary" bindtap="switchToNextToilet" disabled="{{toiletList.length <= 1}}">
+      换一个
+    </button>
+    <!-- 主按钮：立即导航（右侧，视觉权重最高） -->
+    <button class="action-btn-primary" bindtap="navigateToToilet" disabled="{{!currentToilet}}">
+      立即导航
+    </button>
+  </view>
+
+  <!-- 广告区域（预留） -->
+  <view class="ad-container">
+    <!-- 广告内容可以在这里插入 -->
+  </view>
+
+  <!-- 自定义底部提示 -->
+  <view class="custom-toast" wx:if="{{showToast}}">
+    <text class="toast-text">{{toastMessage}}</text>
+  </view>
+</view>
+
